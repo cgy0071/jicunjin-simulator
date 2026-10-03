@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f0e8">
+  <title>积存金模拟器</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%231d1a16'/%3E%3Cpath d='M8 21 16 8l8 13' fill='none' stroke='%23e7c98a' stroke-width='2'/%3E%3Cpath d='M11 16.5h10' stroke='%23e7c98a' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="sticky-head">
+    <div class="inner">
+      <header class="topbar">
+        <div class="brand">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="16" fill="#1d1a16"></circle>
+            <path d="M8 21 16 8l8 13" fill="none" stroke="#e7c98a" stroke-width="2"></path>
+            <path d="M11 16.5h10" stroke="#e7c98a" stroke-width="2"></path>
+          </svg>
+          <div>
+            <div class="brand-name">积存金 <em>模拟器</em></div>
+            <div class="brand-sub">模仿按克记账的买卖和定投，不是真实交易</div>
+          </div>
+        </div>
+        <div class="top-stats">
+          <div><small>总资产</small><strong class="num" id="top-equity">--</strong></div>
+          <div><small>黄金</small><strong class="num" id="top-grams">--</strong></div>
+          <div><small>余额</small><strong class="num" id="top-cash">--</strong></div>
+        </div>
+      </header>
+      <section class="timebar" aria-label="时间推演">
+        <div class="time-row">
+          <div class="clock num" id="sim-clock">模拟时钟</div>
+          <div class="pill" id="sim-status">交易中</div>
+        </div>
+        <div class="time-actions">
+          <button type="button" class="btn btn-gold" data-act="advance" data-days="1">下一交易日</button>
+          <button type="button" class="btn" data-act="advance" data-days="5" title="5 个交易日">一周</button>
+          <button type="button" class="btn" data-act="advance" data-days="21" title="21 个交易日">一月</button>
+          <button type="button" class="btn" data-act="advance" data-days="252" title="252 个交易日">一年</button>
+          <button type="button" class="btn btn-gold" id="play" data-act="play">播放</button>
+          <select id="speed" aria-label="播放速度">
+            <option value="slow">慢</option>
+            <option value="mid">中</option>
+            <option value="fast" selected>快</option>
+          </select>
+          <select id="scenario" aria-label="未来行情假设">
+            <option value="base">基准</option>
+            <option value="bull">慢牛</option>
+            <option value="range">震荡</option>
+            <option value="bear">偏空</option>
+            <option value="wild">高波动</option>
+          </select>
+        </div>
+        <p class="note" id="scenario-desc"></p>
+        <p class="note" id="sim-note" aria-live="polite"></p>
+      </section>
+      <p class="banner" id="banner"></p>
+    </div>
+  </div>
+
+  <main class="stack">
+    <section class="card market is-on" data-panel="market">
+      <section class="intro" id="intro">
+        <p>这是积存金机制模拟，不是真金交易。买入价高于卖出价，持仓按卖出价估值，所以刚买完通常会看到一笔大约等于点差的浮亏。时间不跟现实时钟，点「播放」或「一年」就会按交易日快进。</p>
+        <button type="button" class="btn btn-gold" data-act="dismiss">知道了</button>
+      </section>
+      <div class="section-title">
+        <h2>参考价</h2>
+        <span class="unit">Au99.99 · 元/克</span>
+      </div>
+      <div class="price-line">
+        <div>
+          <div class="price-num num" id="price-num">--</div>
+          <div class="unit">中间价</div>
+        </div>
+        <div class="change num" id="price-change">--</div>
+      </div>
+      <div class="quote-row">
+        <span>买入 <strong class="num" id="q-buy">--</strong></span>
+        <span>卖出 <strong class="num" id="q-sell">--</strong></span>
+        <span>价差 <strong class="num" id="q-spread">--</strong></span>
+      </div>
+      <ul class="mech">
+        <li>按克记账</li>
+        <li>买卖价差</li>
+        <li>卖出价估值</li>
+        <li>加权成本</li>
+        <li>定投扣款</li>
+      </ul>
+      <div class="chart-tools">
+        <div class="seg slim" role="group" aria-label="图形">
+          <button type="button" data-act="chart" data-kind="intraday">分时</button>
+          <button type="button" data-act="chart" data-kind="day" class="is-on">日K</button>
+          <button type="button" data-act="chart" data-kind="week">周K</button>
+          <button type="button" data-act="chart" data-kind="month">月K</button>
+        </div>
+        <div class="seg slim" id="range-seg" role="group" aria-label="范围">
+          <button type="button" data-act="range" data-range="near" class="is-on">近段</button>
+          <button type="button" data-act="range" data-range="year">一年</button>
+          <button type="button" data-act="range" data-range="all">全部</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="price-chart" role="img" aria-label="金价图"></canvas>
+        <div id="chart-tip" class="chart-tip" hidden></div>
+      </div>
+      <div class="ohlc">
+        <span>开 <strong class="num" id="o-open">--</strong></span>
+        <span>高 <strong class="num" id="o-high">--</strong></span>
+        <span>低 <strong class="num" id="o-low">--</strong></span>
+        <span>昨收 <strong class="num" id="o-prev">--</strong></span>
+      </div>
+      <p class="source" id="price-source"></p>
+      <button type="button" class="hold-strip" data-act="tab" data-tab="position">
+        <span><small class="mini-label">持有</small><strong class="num" id="strip-grams">--</strong></span>
+        <span><small class="mini-label">市值</small><strong class="num" id="strip-value">--</strong></span>
+        <span><small class="mini-label">持有收益</small><strong class="num" id="strip-pnl">--</strong></span>
+      </button>
+    </section>
+
+    <aside class="card ticket is-on" data-panel="market">
+      <div class="seg" role="group" aria-label="买卖">
+        <button type="button" data-act="side" data-side="buy" class="is-on">买入</button>
+        <button type="button" data-act="side" data-side="sell">卖出</button>
+      </div>
+      <div class="seg" role="group" aria-label="输入方式">
+        <button type="button" data-act="mode" data-mode="money" class="is-on">按金额</button>
+        <button type="button" data-act="mode" data-mode="gram">按克重</button>
+      </div>
+      <label class="field">
+        <span id="ticket-prefix">¥</span>
+        <input id="ticket-input" inputmode="decimal" autocomplete="off" aria-label="买入或卖出数量" value="500">
+        <span id="ticket-suffix"></span>
+      </label>
+      <div class="chips" id="chips"></div>
+      <p class="avail"><span id="ticket-avail">可用余额</span><button type="button" class="text-btn" id="deposit-link" data-act="deposit">转入</button></p>
+      <div class="preview" id="ticket-preview"></div>
+      <p class="form-error" id="ticket-error"></p>
+      <button type="button" class="btn btn-block btn-gold" id="ticket-submit">确认买入</button>
+    </aside>
+
+    <section class="card position" data-panel="position">
+      <div class="section-title">
+        <h2>持仓</h2>
+        <span class="num" id="pos-equity">--</span>
+      </div>
+      <p class="formula" id="live-formula">持有收益 = 按卖出价计算的市值 − 持仓成本。</p>
+      <div class="stats">
+        <div><small>持有克重</small><strong class="num" id="pos-grams">--</strong></div>
+        <div><small>黄金市值</small><strong class="num" id="pos-value">--</strong></div>
+        <div><small>可用余额</small><strong class="num" id="pos-cash">--</strong></div>
+        <div><small>持仓成本</small><strong class="num" id="pos-cost">--</strong></div>
+        <div><small>成本价</small><strong class="num" id="pos-avg">--</strong></div>
+        <div><small>持有收益率</small><strong class="num" id="pos-rate">--</strong></div>
+        <div><small>已实现收益</small><strong class="num" id="pos-realized">--</strong></div>
+        <div><small>累计收益</small><strong class="num" id="pos-pnl">--</strong></div>
+        <div><small>较上一交易日</small><strong class="num" id="pos-day">--</strong></div>
+      </div>
+      <p class="formula" id="pos-dd">最大回撤 --</p>
+      <div class="legend"><span><i class="a"></i>总资产</span><span><i class="b"></i>本金</span></div>
+      <div class="chart-wrap short">
+        <canvas id="equity-chart" role="img" aria-label="总资产曲线"></canvas>
+        <div id="equity-tip" class="chart-tip" hidden></div>
+      </div>
+      <div class="seg slim filters" role="group" aria-label="成交筛选">
+        <button type="button" data-act="filter" data-filter="all" class="is-on">全部</button>
+        <button type="button" data-act="filter" data-filter="buy">买入</button>
+        <button type="button" data-act="filter" data-filter="sell">卖出</button>
+        <button type="button" data-act="filter" data-filter="fail">失败</button>
+      </div>
+      <div id="trade-list"></div>
+    </section>
+
+    <section class="card dca" data-panel="dca">
+      <h2>定投</h2>
+      <form id="plan-form">
+        <label class="field">
+          <span>¥</span>
+          <input id="plan-amount" inputmode="decimal" autocomplete="off" aria-label="定投金额" value="100">
+        </label>
+        <div class="seg slim" role="group" aria-label="定投周期">
+          <button type="button" data-act="freq" data-freq="daily" class="is-on">每日</button>
+          <button type="button" data-act="freq" data-freq="weekly">每周</button>
+          <button type="button" data-act="freq" data-freq="biweekly">每两周</button>
+          <button type="button" data-act="freq" data-freq="monthly">每月</button>
+        </div>
+        <label class="line" id="weekday-line" hidden>
+          <span>扣款日</span>
+          <select id="plan-weekday" aria-label="每周扣款日">
+            <option value="1">周一</option>
+            <option value="2">周二</option>
+            <option value="3">周三</option>
+            <option value="4">周四</option>
+            <option value="5">周五</option>
+          </select>
+        </label>
+        <label class="line" id="monthday-line" hidden>
+          <span>每月几日</span>
+          <input id="plan-day" type="number" min="1" max="28" value="8" aria-label="每月扣款日">
+        </label>
+        <label class="check"><input type="checkbox" id="plan-now"> 创建时按现价先买一笔</label>
+        <p class="plan-next" id="plan-next"></p>
+        <button type="submit" class="btn btn-dark btn-block" id="plan-submit">创建定投</button>
+      </form>
+      <div id="plan-list"></div>
+    </section>
+
+    <section class="card me" data-panel="me">
+      <h2>我的模拟</h2>
+      <div class="settings">
+        <label class="line">单边点差（元/克）<input id="spread-input" inputmode="decimal" aria-label="单边点差"></label>
+        <label class="line">重置后的初始资金（元）<input id="start-cash" inputmode="decimal" aria-label="初始资金"></label>
+        <p class="formula" id="start-hint">初始资金在重置账户后生效。点差改完会立刻重估持仓。</p>
+        <div class="actions">
+          <button type="button" class="btn btn-gold" data-act="deposit">转入虚拟资金</button>
+          <button type="button" class="btn" data-act="reset">重置账户</button>
+          <button type="button" class="btn" data-act="restart">重新开始</button>
+          <button type="button" class="btn" data-act="export">导出成交</button>
+        </div>
+        <p class="audit" id="audit-line"></p>
+      </div>
+      <div class="rules" id="rules"></div>
+    </section>
+  </main>
+
+  <footer class="foot inner">数据只存在这台浏览器里。金价在 2026-09-30 的锚点之后是随机路径，用来体验规则，不是预测，也不构成投资建议。与支付宝、蚂蚁集团及银行无关。</footer>
+
+  <nav class="bottom-nav" aria-label="页面">
+    <button type="button" data-act="tab" data-tab="market" class="is-on">行情</button>
+    <button type="button" data-act="tab" data-tab="position">持仓</button>
+    <button type="button" data-act="tab" data-tab="dca">定投</button>
+    <button type="button" data-act="tab" data-tab="me">我的</button>
+  </nav>
+
+  <div id="toast" class="toast" hidden role="status"></div>
+  <div id="modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close="1"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h3 id="modal-title"></h3>
+      <p id="modal-text"></p>
+      <label class="field compact" id="modal-field" hidden>
+        <span>¥</span>
+        <input id="modal-input" inputmode="decimal" autocomplete="off" aria-label="金额">
+      </label>
+      <p class="form-error" id="modal-error"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="modal-cancel">取消</button>
+        <button type="button" class="btn btn-dark" id="modal-ok">确定</button>
+      </div>
+    </div>
+  </div>
+  <noscript>需要启用 JavaScript 才能使用这个模拟器。</noscript>
+  <script src="js/engine.js"></script>
+  <script src="js/chart.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
